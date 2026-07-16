@@ -1,5 +1,8 @@
 # Survey Shot Plotter — prototype
 
+**Live tool:** https://trevornih.github.io/survey-plotter/
+**Repo:** https://github.com/TrevorNIH/survey-plotter
+
 Converts raw survey shot files (PNEZD text/CSV) into an interactive plot, a CAD-ready
 DXF, and a printable sheet. Built for Brian Keever (P3 Civil) from the
 2400009 / 161 Rainbow Dr, Stanley NC job as the reference dataset.
