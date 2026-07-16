@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Survey Shot Plotter — P3 Civil</title>
+<style>
+  :root{
+    --bg:#090d12; --panel:#111821; --panel2:#182331; --panel3:#202d3b; --ink:#edf5fb; --dim:#8294a6;
+    --accent:#33d1b0; --accent2:#58a6ff; --line:#263544; --danger:#ff7b72; --shadow:0 18px 50px #0008;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:13px/1.45 Inter,"Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(--ink);display:flex;height:100vh;overflow:hidden}
+  #sidebar{width:356px;min-width:356px;background:linear-gradient(180deg,#121b25,#0e151d);border-right:1px solid var(--line);display:flex;flex-direction:column;overflow-y:auto;box-shadow:10px 0 30px #0003;z-index:2}
+  #sidebar h1{font-size:16px;margin:0;padding:0}
+  #sidebar h1 small{display:block;font-weight:400;color:var(--dim);font-size:11px;margin-top:2px}
+  .brand{padding:18px 16px 15px;display:flex;gap:12px;align-items:center;border-bottom:1px solid var(--line);background:linear-gradient(135deg,#182634,#101821)}
+  .mark{width:40px;height:40px;border:1px solid #33d1b088;border-radius:10px;display:grid;place-items:center;color:var(--accent);font:bold 17px/1 Consolas;box-shadow:inset 0 0 18px #33d1b015,0 0 18px #33d1b010}
+  .eyebrow{font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  .sec{border-bottom:1px solid var(--line);padding:11px 14px}
+  .sec h2{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:#a8b8c7;margin:0 0 9px;cursor:pointer;display:flex;align-items:center;gap:7px;user-select:none}
+  .sec h2:before{content:'⌄';color:var(--accent);font-size:14px;transition:transform .18s}.sec.collapsed h2:before{transform:rotate(-90deg)}
+  .sec.collapsed>:not(h2){display:none!important}
+  textarea{width:100%;height:110px;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:4px;font:11px/1.35 Consolas,monospace;padding:6px;resize:vertical}
+  button{background:linear-gradient(#202e3d,#18232f);color:var(--ink);border:1px solid #34485c;border-radius:6px;padding:7px 11px;cursor:pointer;font-size:12px;box-shadow:0 2px 7px #0003;transition:.15s}
+  button:hover{border-color:var(--accent);transform:translateY(-1px)} button:active{transform:none}
+  button.primary{background:linear-gradient(135deg,#37d7b5,#23b99a);border-color:#56e7c8;color:#071611;font-weight:700}
+  .row{display:flex;gap:6px;align-items:center;margin:6px 0;flex-wrap:wrap}
+  .row label{color:var(--dim);min-width:86px}
+  input[type=range]{flex:1;accent-color:var(--accent);height:4px}
+  input[type=number],input[type=text],select{background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:4px 6px;font-size:12px}
+  input[type=number]{width:64px}
+  .chk{display:flex;align-items:center;gap:6px;margin:3px 0;color:var(--ink)}
+  #layerList .lrow{display:flex;align-items:center;gap:6px;padding:2px 0;font-size:12px}
+  #layerList .sw{width:14px;height:14px;border-radius:3px;border:1px solid #0008;flex:none}
+  #layerList .cnt{color:var(--dim);margin-left:auto;font-size:11px}
+  #codeTable{width:100%;border-collapse:collapse;font-size:11px}
+  #codeTable th{color:var(--dim);text-align:left;font-weight:600;padding:2px 4px;border-bottom:1px solid var(--line)}
+  #codeTable td{padding:2px 4px;border-bottom:1px solid #ffffff10}
+  #codeTable select,#codeTable input{font-size:11px;padding:2px 3px;width:100%}
+  #codeTable input[type=color]{width:26px;height:20px;padding:0;border:none;background:none}
+  #main{flex:1;display:flex;flex-direction:column;min-width:0}
+  #toolbar{display:flex;gap:8px;align-items:center;padding:10px 14px;background:#111923e8;border-bottom:1px solid var(--line);flex-wrap:wrap;min-height:47px}
+  #toolbar .grp{display:flex;gap:6px;align-items:center;padding-right:10px;border-right:1px solid var(--line)}
+  #toolbar .grp:last-child{border-right:none}
+  #toolbar label{color:var(--dim);font-size:12px}
+  #cvwrap{flex:1;position:relative;min-height:0}
+  canvas#cv{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair}
+  #status{position:absolute;left:10px;bottom:8px;background:#000a;padding:3px 8px;border-radius:4px;font:11px Consolas,monospace;color:#cde;pointer-events:none}
+  #warnings{color:#ffb86c;font-size:11px;white-space:pre-wrap}
+  #tooltip{position:absolute;display:none;pointer-events:none;background:#101821f2;border:1px solid #3a5166;border-radius:8px;padding:9px 11px;box-shadow:var(--shadow);font:11px/1.55 Consolas,monospace;color:#dceaf5;z-index:5;max-width:280px}
+  #dropzone{position:fixed;inset:16px;display:none;place-items:center;border:2px dashed var(--accent);border-radius:16px;background:#07100ee8;color:#eafff9;z-index:50;font-size:18px;font-weight:700;box-shadow:inset 0 0 80px #33d1b020}
+  #dropzone.show{display:grid}.kbd{border:1px solid #41576b;border-bottom-width:2px;border-radius:4px;padding:1px 5px;font:10px Consolas;color:#bdcad5;background:#1c2733}
+  .hint{margin-left:auto;color:var(--dim);display:flex;gap:10px;font-size:11px}
+  /* ---------- print sheet ---------- */
+  #sheet{display:none}
+  @media print{
+    body{display:block;height:auto;overflow:visible;background:#fff}
+    #sidebar,#main{display:none!important}
+    #sheet{display:block}
+  }
+  #sheet .page{width:7.8in;height:13.3in;margin:0 auto;position:relative;color:#000;font-family:Arial,sans-serif}
+  #sheet .border{position:absolute;inset:0;border:2px solid #000}
+  #sheet .plotarea{position:absolute;left:0.15in;top:0.15in;right:0.15in;bottom:2.6in;border:1px solid #000;overflow:hidden}
+  #sheet canvas{width:100%;height:100%}
+  #sheet .tblock{position:absolute;left:0.15in;right:0.15in;bottom:0.15in;height:2.3in;border:1px solid #000;display:flex}
+  #sheet .tb-l{flex:1.6;padding:8px;border-right:1px solid #000}
+  #sheet .tb-r{flex:1;padding:8px;font-size:9px}
+  #sheet .tb-l h3{margin:0 0 2px;font-size:14px;text-align:center}
+  #sheet .tb-l .sub{text-align:center;font-size:10px;margin-bottom:6px}
+  #sheet .fld{font-size:10px;margin:2px 0}
+  #sheet .fld b{display:inline-block;min-width:80px}
+</style>
+</head>
+<body>
+<div id="dropzone">Drop a PNEZD shot file to open it</div>
+<div id="sidebar">
+  <div class="brand"><div class="mark">P3</div><div><div class="eyebrow">Field to finish</div><h1>Survey Shot Plotter <small>PNEZD → CAD plot → DXF / sheet</small></h1></div></div>
+
+  <div class="sec">
+    <h2>1 · Shot Data (PNEZD)</h2>
+    <textarea id="src" spellcheck="false" placeholder="Point,Northing,Easting,Elev,Description&#10;198,5190.3726,10082.7648,79.1461,IRF 1&quot;"></textarea>
+    <div class="row">
+      <button class="primary" id="btnParse">Parse &amp; Plot</button>
+      <button id="btnFile">Load file…</button>
+      <input type="file" id="file" accept=".txt,.csv" style="display:none">
+      <button id="btnSample">Sample</button>
+    </div>
+    <div id="warnings"></div>
+  </div>
+
+  <div class="sec">
+    <h2>2 · View</h2>
+    <div class="row"><label>Rotation</label><input type="range" id="rot" min="-180" max="180" step="0.5" value="0"><input type="number" id="rotN" step="0.5" value="0" style="width:70px">°</div>
+    <div class="row"><label>Text size</label><input type="range" id="tsize" min="4" max="20" step="1" value="10"><span id="tsizeV" style="color:var(--dim)">10</span></div>
+    <div class="row"><label>Point size</label><input type="range" id="psize" min="1" max="8" step="0.5" value="3"><span id="psizeV" style="color:var(--dim)">3</span></div>
+    <div class="chk"><input type="checkbox" id="showNum" checked><label for="showNum">Point numbers</label></div>
+    <div class="chk"><input type="checkbox" id="showElev"><label for="showElev">Elevations</label></div>
+    <div class="chk"><input type="checkbox" id="showDesc" checked><label for="showDesc">Descriptions</label></div>
+    <div class="chk"><input type="checkbox" id="showPts" checked><label for="showPts">Point markers</label></div>
+    <div class="chk"><input type="checkbox" id="showFar"><label for="showFar">Show far / control points</label></div>
+    <div class="row"><button id="btnFit">Zoom to fit</button><button id="btnNorth">North up (0°)</button></div>
+  </div>
+
+  <div class="sec">
+    <h2>3 · Layers</h2>
+    <div id="layerList"></div>
+  </div>
+
+  <div class="sec">
+    <h2>4 · Field Codes <small style="color:var(--dim);text-transform:none">(edit &amp; re-plot)</small></h2>
+    <table id="codeTable"><thead><tr><th>Code</th><th>Type</th><th>Layer</th><th></th></tr></thead><tbody></tbody></table>
+    <div class="row" style="margin-top:8px"><button id="btnReplot">Apply code changes</button><button id="btnUndoCode" disabled>Undo edit</button></div>
+  </div>
+
+  <div class="sec">
+    <h2>5 · Sheet Info (print)</h2>
+    <div class="row"><label>Title</label><input type="text" id="fTitle" value="MORTGAGE SURVEY" style="flex:1"></div>
+    <div class="row"><label>Address</label><input type="text" id="fAddr" value="" style="flex:1"></div>
+    <div class="row"><label>Job #</label><input type="text" id="fJob" value="" style="flex:1"></div>
+    <div class="row"><label>Date</label><input type="text" id="fDate" value="" style="flex:1"></div>
+    <div class="row"><label>Surveyor</label><input type="text" id="fSurv" value="P3 Civil — B. Keever" style="flex:1"></div>
+    <div class="row"><label>Scale 1"=</label><select id="fScale"><option>10</option><option>20</option><option selected>30</option><option>40</option><option>50</option><option>60</option><option>100</option></select><span style="color:var(--dim)">ft</span></div>
+    <div class="chk"><input type="checkbox" id="showLegend" checked><label for="showLegend">Include symbol / layer legend</label></div>
+  </div>
+
+  <div class="sec">
+    <h2>6 · Export</h2>
+    <div class="row">
+      <button class="primary" id="btnDXF">Download DXF</button>
+      <button id="btnPrint">Print view / PDF</button>
+    </div>
+    <div style="color:var(--dim);font-size:11px;margin-top:6px">DXF is written north-up in world coordinates (E=X, N=Y, Z=elev) — rotation only affects the printed sheet.</div>
+  </div>
+</div>
+
+<div id="main">
+  <div id="toolbar">
+    <div class="grp"><span id="tbInfo" style="color:var(--dim)">no data</span></div>
+    <div class="grp"><label>Cursor:</label><span id="tbCoord" style="font-family:Consolas,monospace">—</span></div>
+    <div class="hint"><span><span class="kbd">F</span> fit</span><span><span class="kbd">N</span> north up</span><span>scroll to zoom</span></div>
+  </div>
+  <div id="cvwrap">
+    <canvas id="cv"></canvas>
+    <div id="status"></div>
+    <div id="tooltip"></div>
+  </div>
+</div>
+
+<!-- print-only sheet -->
+<div id="sheet">
+  <div class="page">
+    <div class="border"></div>
+    <div class="plotarea"><canvas id="cvPrint"></canvas></div>
+    <div class="tblock">
+      <div class="tb-l">
+        <h3 id="pTitle">MORTGAGE SURVEY</h3>
+        <div class="sub" id="pAddr"></div>
+        <div class="fld"><b>Job #:</b><span id="pJob"></span></div>
+        <div class="fld"><b>Date:</b><span id="pDate"></span></div>
+        <div class="fld"><b>Surveyor:</b><span id="pSurv"></span></div>
+        <div class="fld"><b>Scale:</b><span id="pScale"></span></div>
+        <div class="fld"><b>View rotation:</b><span id="pRot"></span> (north arrow shows true orientation)</div>
+      </div>
+      <div class="tb-r">
+        <b>NOTES</b>
+        <ol style="margin:4px 0 0 14px;padding:0">
+          <li>Preliminary plot generated from field shot data. Not a certified survey document.</li>
+          <li>Coordinates are localized field values unless noted.</li>
+          <li>Linework auto-connected from field codes; verify before use.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   Survey Shot Plotter — prototype
+   Parses PNEZD shot files, auto-connects linework from field
+   codes (B=begin, E=end), renders an interactive north-up plot
+   with print rotation, and exports DXF (R12).
+   ============================================================ */
+
+// ---------- default field-code dictionary (editable in UI) ----------
+// type: 'line' = shots connect into polylines; 'point' = discrete symbol
+const DEFAULT_CODES = {
+  FN : {type:'line',  layer:'FENCE',        color:'#c98f4a', name:'Fence'},
+  FG : {type:'line',  layer:'FENCE-GATE',   color:'#e0b060', name:'Fence gate'},
+  EC : {type:'line',  layer:'CONC',         color:'#b9c2cc', name:'Edge of concrete'},
+  BD : {type:'line',  layer:'BLDG',         color:'#ff6b6b', name:'Building'},
+  DECK:{type:'line',  layer:'DECK',         color:'#d98cb3', name:'Deck'},
+  STEP:{type:'line',  layer:'STEPS',        color:'#c792ea', name:'Steps'},
+  OE : {type:'line',  layer:'UTIL-OHE',     color:'#f9e2af', name:'Overhead electric'},
+  EP : {type:'line',  layer:'PAVE',         color:'#8be9fd', name:'Edge of pavement'},
+  IRF: {type:'point', layer:'MON',          color:'#50fa7b', name:'Iron rod found'},
+  RBF: {type:'point', layer:'MON',          color:'#50fa7b', name:'Rebar found'},
+  EIP: {type:'point', layer:'MON',          color:'#50fa7b', name:'Existing iron pipe'},
+  NL : {type:'point', layer:'MON',          color:'#50fa7b', name:'Nail'},
+  NLS: {type:'point', layer:'CTRL',         color:'#69f0ae', name:'Nail set / control'},
+  STK: {type:'point', layer:'STAKE',        color:'#ffd54f', name:'Stake'},
+  PP : {type:'point', layer:'UTIL',         color:'#ffe082', name:'Power pole'},
+  'TEL-PED':{type:'point',layer:'UTIL',     color:'#ffcc80', name:'Telephone pedestal'},
+  EM : {type:'point', layer:'UTIL',         color:'#ffab91', name:'Electric meter'},
+  HVAC:{type:'point', layer:'UTIL',         color:'#ffab91', name:'HVAC unit'},
+  WELL:{type:'point', layer:'WATER',        color:'#4dd0e1', name:'Well'},
+  SHED:{type:'point', layer:'OUTBLDG',      color:'#ef9a9a', name:'Shed'},
+  CHIMNEY:{type:'point',layer:'BLDG',       color:'#ff6b6b', name:'Chimney'},
+  PORCH:{type:'point',layer:'BLDG',         color:'#ff8787', name:'Porch'},
+};
+
+let codes = {};          // active dictionary (base codes; FN1 resolves to FN)
+let points = [];         // {p,n,e,z,desc,codes:[...],note,far}
+let lines = [];          // {code,base,layer,color,pts:[indices]}
+let layers = {};         // layer -> {color,visible,count}
+let view = {cx:0, cy:0, scale:1, rot:0};   // world center, px per ft, degrees
+let farPts = [];
+let hoverPoint = -1, selectedPoint = -1, labelRects = [], codeUndo = [];
+
+// strip trailing digits: FN1 -> FN (instance suffix)
+function baseCode(tok){
+  const m = tok.match(/^([A-Z][A-Z-]*?)(\d*)$/);
+  return m ? m[1] : tok;
+}
+function isCodeTok(tok){ return !!codes[baseCode(tok)]; }
+
+// ---------- parser ----------
+function parse(text){
+  points = []; lines = []; layers = {}; farPts = [];
+  const warns = [];
+  const active = {};   // lineKey (e.g. FN, FN1) -> line object
+  const rows = text.split(/\r?\n/).filter(r=>r.trim());
+
+  // first pass: collect raw points, discover codes
+  const raw = [];
+  for(const row of rows){
+    const c = row.split(',');
+    if(c.length < 5){ if(row.trim()) warns.push('Skipped row: '+row.slice(0,40)); continue; }
+    const p = c[0].trim(), n = parseFloat(c[1]), e = parseFloat(c[2]), z = parseFloat(c[3]);
+    const desc = c.slice(4).join(',').trim();
+    if(isNaN(n)||isNaN(e)){ warns.push('Bad coords @ pt '+p); continue; }
+    raw.push({p,n,e,z,desc});
+  }
+  // discover unknown codes so they appear in the editable table
+  for(const r of raw){
+    for(const tok of r.desc.split(/\s+/)){
+      const b = baseCode(tok.toUpperCase());
+      if(/^[A-Z][A-Z-]{1,9}$/.test(b) && !codes[b] && b!=='B' && b!=='E' && !STOPWORDS.has(b)){
+        codes[b] = {type:'point', layer:b, color:autoColor(b), name:b+' (auto)'};
+      }
+    }
+  }
+  // median for far-point detection
+  const meds = a=>{const s=[...a].sort((x,y)=>x-y);return s[s.length>>1]};
+  const mN = meds(raw.map(r=>r.n)), mE = meds(raw.map(r=>r.e));
+
+  for(const r of raw){
+    const toks = r.desc.split(/\s+/);
+    const ptCodes = [], noteToks = [];
+    let i = 0, far = Math.abs(r.n-mN)>5000 || Math.abs(r.e-mE)>5000;
+    const idx = points.length;
+    while(i < toks.length){
+      const T = toks[i].toUpperCase();
+      if(T === 'B' && i+1 < toks.length && isCodeTok(toks[i+1].toUpperCase())){
+        // begin line instance
+        const key = toks[i+1].toUpperCase(), b = baseCode(key), def = codes[b];
+        if(def.type === 'line'){
+          if(active[key]) closeLine(active[key]);
+          active[key] = {code:key, base:b, layer:def.layer, color:def.color, pts:[idx]};
+          lines.push(active[key]);
+        } else ptCodes.push(key);
+        i += 2; continue;
+      }
+      if(isCodeTok(T)){
+        const b = baseCode(T), def = codes[b];
+        const endsHere = (toks[i+1]||'').toUpperCase() === 'E';
+        if(def.type === 'line'){
+          if(!active[T]){ active[T] = {code:T, base:b, layer:def.layer, color:def.color, pts:[]}; lines.push(active[T]); }
+          if(!far) active[T].pts.push(idx);
+          if(endsHere){ closeLine(active[T]); delete active[T]; i++; }
+        } else {
+          ptCodes.push(T);
+          if(endsHere) i++; // stray E after a point code — swallow
+        }
+        i++; continue;
+      }
+      noteToks.push(toks[i]); i++;
+    }
+    if(far) farPts.push(idx);
+    points.push({...r, codes:ptCodes, note:noteToks.join(' '), far});
+  }
+  // build layer registry
+  for(const L of lines){ touchLayer(L.layer, L.color); layers[L.layer].count += L.pts.length; }
+  for(const pt of points){ for(const c of pt.codes){ const d = codes[baseCode(c)]; touchLayer(d.layer, d.color); layers[d.layer].count++; } }
+  document.getElementById('warnings').textContent =
+    (farPts.length? farPts.length+' far point(s) treated as control/ties (toggle in View).\n':'') + warns.join('\n');
+  return true;
+}
+function closeLine(L){ /* hook for future: closed-shape detection */ }
+function touchLayer(name,color){ if(!layers[name]) layers[name]={color,visible:true,count:0}; }
+const STOPWORDS = new Set(['DIST:','FILL','FACE','COR','DIA.','DIA','@','THE','OF']);
+function autoColor(s){ let h=0; for(const ch of s) h=(h*31+ch.charCodeAt(0))%360; return `hsl(${h},65%,65%)`; }
+
+// ---------- rendering ----------
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+function worldToScreen(e,n,W,H,v){
+  const r = -v.rot*Math.PI/180;
+  const dx = e-v.cx, dy = n-v.cy;
+  const rx = dx*Math.cos(r)-dy*Math.sin(r), ry = dx*Math.sin(r)+dy*Math.cos(r);
+  return [W/2 + rx*v.scale, H/2 - ry*v.scale];
+}
+function draw(){
+  const W = cv.clientWidth, H = cv.clientHeight;
+  if(cv.width!==W*devicePixelRatio){ cv.width=W*devicePixelRatio; cv.height=H*devicePixelRatio; }
+  ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+  ctx.fillStyle='#14161a'; ctx.fillRect(0,0,W,H);
+  drawGrid(ctx,W,H,view,true);
+  renderScene(ctx,W,H,view,{
+    dark:true,
+    tsize:+ui.tsize.value, psize:+ui.psize.value,
+    num:ui.showNum.checked, elev:ui.showElev.checked, desc:ui.showDesc.checked,
+    pts:ui.showPts.checked, far:ui.showFar.checked
+  });
+  drawNorthArrow(ctx, W-46, 52, 30, view.rot, true);
+  drawScaleBar(ctx,22,H-42,view.scale,true);
+  document.getElementById('status').textContent =
+    `rot ${view.rot.toFixed(1)}°  ·  1 px = ${(1/view.scale).toFixed(2)} ft  ·  ${points.length} pts / ${lines.filter(l=>l.pts.length>1).length} lines`;
+}
+function renderScene(g,W,H,v,opt){
+  // lines
+  for(const L of lines){
+    if(L.pts.length<2 || !layers[L.layer].visible) continue;
+    const selected = selectedPoint>=0 && L.pts.includes(selectedPoint);
+    g.strokeStyle = selected ? '#ffffff' : L.color; g.lineWidth = selected ? 3.5 : 1.5;
+    if(selected){ g.shadowColor=L.color; g.shadowBlur=9; }
+    if(L.base==='OE') g.setLineDash([8,5]); else g.setLineDash([]);
+    g.beginPath();
+    L.pts.forEach((pi,k)=>{
+      const p = points[pi], s = worldToScreen(p.e,p.n,W,H,v);
+      k? g.lineTo(s[0],s[1]) : g.moveTo(s[0],s[1]);
+    });
+    g.stroke(); g.setLineDash([]); g.shadowBlur=0;
+  }
+  // points + labels
+  g.textBaseline='middle'; labelRects=[];
+  for(let i=0;i<points.length;i++){
+    const p = points[i];
+    if(p.far && !opt.far) continue;
+    const onLine = lines.some(L=>L.pts.includes(i) && layers[L.layer].visible);
+    const vis = p.codes.some(c=>layers[codes[baseCode(c)].layer].visible);
+    if(!onLine && p.codes.length && !vis) continue;
+    const s = worldToScreen(p.e,p.n,W,H,v);
+    if(s[0]<-50||s[1]<-50||s[0]>W+50||s[1]>H+50) continue;
+    const col = p.codes.length ? codes[baseCode(p.codes[0])].color : (opt.dark?'#8899aa':'#556');
+    if(opt.pts) drawSurveySymbol(g,s[0],s[1],Math.max(opt.psize,2),p,col,i===selectedPoint);
+    g.font = opt.tsize+'px Arial';
+    let ly = s[1]-opt.tsize*0.7;
+    g.fillStyle = opt.dark ? '#cfd8dc':'#222';
+    const parts=[];
+    if(opt.num) parts.push({t:p.p,c:opt.dark?'#dce7ef':'#222'});
+    if(opt.elev) parts.push({t:p.z.toFixed(2),c:opt.dark?'#80cbc4':'#066'});
+    if(opt.desc&&(p.codes.length||p.note)) parts.push({t:[...p.codes,p.note].filter(Boolean).join(' '),c:col});
+    if(parts.length){
+      const widest=Math.max(...parts.map(x=>g.measureText(x.t).width)), lh=opt.tsize+1;
+      let x=s[0]+opt.psize+5, y=ly, rect={x,y:y-opt.tsize*.6,w:widest+2,h:parts.length*lh};
+      const overlaps=labelRects.some(r=>rect.x<r.x+r.w&&rect.x+rect.w>r.x&&rect.y<r.y+r.h&&rect.y+rect.h>r.y);
+      if(overlaps){ x=s[0]+opt.psize+12; y=s[1]+opt.psize+12; rect={x,y:y-opt.tsize*.6,w:widest+2,h:parts.length*lh}; }
+      const still=labelRects.some(r=>rect.x<r.x+r.w&&rect.x+rect.w>r.x&&rect.y<r.y+r.h&&rect.y+rect.h>r.y);
+      if(!still || i===selectedPoint){
+        if(overlaps){g.strokeStyle=opt.dark?'#65788a':'#777';g.lineWidth=.7;g.beginPath();g.moveTo(s[0]+3,s[1]+3);g.lineTo(x-2,y);g.stroke();}
+        parts.forEach((q,k)=>{g.fillStyle=q.c;g.fillText(q.t,x,y+k*lh)}); labelRects.push(rect);
+      }
+    }
+  }
+}
+function drawSurveySymbol(g,x,y,r,p,col,selected){
+  const base=p.codes.length?baseCode(p.codes[0]):'', layer=p.codes.length?codes[base]?.layer:'';
+  g.save(); g.translate(x,y); g.strokeStyle=selected?'#fff':col; g.fillStyle=col; g.lineWidth=selected?2.4:1.3;
+  if(selected){g.shadowColor=col;g.shadowBlur=10}
+  if(layer==='MON'||['IRF','RBF','EIP','NL','NLS'].includes(base)){
+    g.beginPath();g.arc(0,0,r+2,0,Math.PI*2);g.stroke();g.beginPath();g.moveTo(-r-4,0);g.lineTo(r+4,0);g.moveTo(0,-r-4);g.lineTo(0,r+4);g.stroke();
+  }else if(base==='PP'){
+    g.beginPath();g.arc(0,0,r+3,0,Math.PI*2);g.stroke();g.beginPath();g.moveTo(-r-2,-r-2);g.lineTo(r+2,r+2);g.moveTo(r+2,-r-2);g.lineTo(-r-2,r+2);g.stroke();
+  }else if(base==='WELL'){
+    g.beginPath();g.arc(0,0,r+3,0,Math.PI*2);g.stroke();g.beginPath();g.arc(0,0,r*.8,0,Math.PI*2);g.stroke();
+  }else if(base==='SHED'){
+    g.strokeRect(-r-3,-r-3,(r+3)*2,(r+3)*2);g.beginPath();g.moveTo(-r-3,-r-3);g.lineTo(r+3,r+3);g.moveTo(r+3,-r-3);g.lineTo(-r-3,r+3);g.stroke();
+  }else if(layer==='UTIL'||base==='EM'||base==='HVAC'||base==='TEL-PED'){
+    g.strokeRect(-r-2,-r-2,(r+2)*2,(r+2)*2);g.beginPath();g.moveTo(-r,0);g.lineTo(r,0);g.stroke();
+  }else{g.beginPath();g.arc(0,0,r,0,Math.PI*2);g.fill()}
+  g.restore();
+}
+function niceStep(raw){const p=10**Math.floor(Math.log10(raw)),n=raw/p;return (n<2?1:n<5?2:5)*p}
+function drawGrid(g,W,H,v,dark){
+  const step=niceStep(90/v.scale), col=dark?'#294052':'#d9e0e5'; g.save();g.strokeStyle=col;g.fillStyle=dark?'#668095':'#65717c';g.lineWidth=.6;g.font='10px Consolas';
+  const corners=[[0,0],[W,H]].map(([x,y])=>screenDeltaToWorldFor(v,x-W/2,y-H/2));
+  const minE=v.cx+Math.min(corners[0][0],corners[1][0])-step*2,maxE=v.cx+Math.max(corners[0][0],corners[1][0])+step*2;
+  const minN=v.cy+Math.min(corners[0][1],corners[1][1])-step*2,maxN=v.cy+Math.max(corners[0][1],corners[1][1])+step*2;
+  for(let e=Math.floor(minE/step)*step;e<=maxE;e+=step){const a=worldToScreen(e,minN,W,H,v),b=worldToScreen(e,maxN,W,H,v);g.beginPath();g.moveTo(...a);g.lineTo(...b);g.stroke();if(Math.abs(a[0])<W+100)g.fillText(e.toFixed(0),Math.max(4,Math.min(W-55,a[0]+3)),H-7)}
+  for(let n=Math.floor(minN/step)*step;n<=maxN;n+=step){const a=worldToScreen(minE,n,W,H,v),b=worldToScreen(maxE,n,W,H,v);g.beginPath();g.moveTo(...a);g.lineTo(...b);g.stroke();if(Math.abs(a[1])<H+100)g.fillText(n.toFixed(0),5,Math.max(10,Math.min(H-10,a[1]-3)))}g.restore();
+}
+function screenDeltaToWorldFor(v,dxPx,dyPx){const rr=v.rot*Math.PI/180,rx=dxPx/v.scale,ry=-dyPx/v.scale;return[rx*Math.cos(rr)-ry*Math.sin(rr),rx*Math.sin(rr)+ry*Math.cos(rr)]}
+function drawScaleBar(g,x,y,scale,dark){const target=110/scale,ft=niceStep(target),w=ft*scale;g.save();g.strokeStyle=g.fillStyle=dark?'#dce8ef':'#000';g.lineWidth=2;g.font='10px Arial';g.beginPath();g.moveTo(x,y);g.lineTo(x+w,y);g.moveTo(x,y-5);g.lineTo(x,y+5);g.moveTo(x+w,y-5);g.lineTo(x+w,y+5);g.stroke();g.fillText(ft+' ft',x+w/2-12,y-8);g.restore()}
+function drawNorthArrow(g,x,y,r,rot,dark){
+  const a = rot*Math.PI/180; // screen rotation of north
+  g.save(); g.translate(x,y); g.rotate(a);
+  g.strokeStyle = dark? '#e8eaed':'#000'; g.fillStyle = g.strokeStyle; g.lineWidth = 1.5;
+  g.beginPath(); g.arc(0,0,r,0,7); g.stroke();
+  g.beginPath(); g.moveTo(0,-r+4); g.lineTo(6,8); g.lineTo(0,4); g.lineTo(-6,8); g.closePath(); g.fill();
+  g.font='bold '+Math.round(r*0.5)+'px Arial'; g.textAlign='center';
+  g.fillText('N',0,-r-6);
+  g.restore(); g.textAlign='left';
+}
+
+// ---------- fit / interaction ----------
+function fit(){
+  const use = points.filter(p=>!p.far || ui.showFar.checked);
+  if(!use.length) return;
+  const es = use.map(p=>p.e), ns = use.map(p=>p.n);
+  const minE=Math.min(...es), maxE=Math.max(...es), minN=Math.min(...ns), maxN=Math.max(...ns);
+  view.cx=(minE+maxE)/2; view.cy=(minN+maxN)/2;
+  const W=cv.clientWidth, H=cv.clientHeight;
+  view.scale = Math.min(W/(maxE-minE+40), H/(maxN-minN+40)) * 0.92;
+  draw();
+}
+let drag=null;
+cv.addEventListener('mousedown',e=>{drag=[e.clientX,e.clientY]; cv.style.cursor='grabbing';});
+window.addEventListener('mouseup',()=>{drag=null; cv.style.cursor='grab';});
+// rotate a rotated-frame (screen-aligned) delta back into world coords
+function screenDeltaToWorld(dxPx, dyPx){
+  const rr = view.rot*Math.PI/180;
+  const rx = dxPx/view.scale, ry = -dyPx/view.scale;
+  return [rx*Math.cos(rr)-ry*Math.sin(rr), rx*Math.sin(rr)+ry*Math.cos(rr)];
+}
+window.addEventListener('mousemove',e=>{
+  const rect=cv.getBoundingClientRect();
+  if(drag){
+    const [wx,wy]=screenDeltaToWorld(e.clientX-drag[0], e.clientY-drag[1]);
+    view.cx -= wx; view.cy -= wy;
+    drag=[e.clientX,e.clientY]; draw();
+  }
+  const [wx2,wy2]=screenDeltaToWorld(e.clientX-rect.left-cv.clientWidth/2, e.clientY-rect.top-cv.clientHeight/2);
+  document.getElementById('tbCoord').textContent = 'N '+(view.cy+wy2).toFixed(2)+'  E '+(view.cx+wx2).toFixed(2);
+  if(!drag && rect.width){
+    let hit=-1,best=11;
+    points.forEach((p,i)=>{if(p.far&&!ui.showFar.checked)return;const s=worldToScreen(p.e,p.n,cv.clientWidth,cv.clientHeight,view),d=Math.hypot(e.clientX-rect.left-s[0],e.clientY-rect.top-s[1]);if(d<best){best=d;hit=i}});
+    if(hit!==hoverPoint){hoverPoint=hit;showTooltip(e,hit)} else if(hit>=0) showTooltip(e,hit);
+  }
+});
+cv.addEventListener('click',e=>{if(drag)return;selectedPoint=hoverPoint;draw()});
+cv.addEventListener('mouseleave',()=>{hoverPoint=-1;document.getElementById('tooltip').style.display='none'});
+function showTooltip(e,i){const t=document.getElementById('tooltip');if(i<0){t.style.display='none';return}const p=points[i],r=document.getElementById('cvwrap').getBoundingClientRect();t.innerHTML=`<b>POINT ${esc(p.p)}</b><br>N ${p.n.toFixed(4)}<br>E ${p.e.toFixed(4)}<br>Z ${p.z.toFixed(4)}<br><span style="color:#33d1b0">${esc(p.desc||'No description')}</span>`;t.style.display='block';t.style.left=Math.min(r.width-285,e.clientX-r.left+14)+'px';t.style.top=Math.min(r.height-105,e.clientY-r.top+14)+'px'}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+cv.addEventListener('wheel',e=>{
+  e.preventDefault();
+  view.scale *= e.deltaY<0 ? 1.15 : 1/1.15;
+  draw();
+},{passive:false});
+
+// ---------- UI wiring ----------
+const ui = Object.fromEntries(['src','rot','rotN','tsize','psize','showNum','showElev','showDesc','showPts','showFar']
+  .map(id=>[id,document.getElementById(id)]));
+ui.rot.oninput = ()=>{ view.rot=+ui.rot.value; ui.rotN.value=ui.rot.value; draw(); saveSettings(); };
+ui.rotN.oninput = ()=>{ view.rot=+ui.rotN.value||0; ui.rot.value=ui.rotN.value; draw(); saveSettings(); };
+ui.tsize.oninput = ()=>{ document.getElementById('tsizeV').textContent=ui.tsize.value; draw(); saveSettings(); };
+ui.psize.oninput = ()=>{ document.getElementById('psizeV').textContent=ui.psize.value; draw(); saveSettings(); };
+for(const id of ['showNum','showElev','showDesc','showPts','showFar']) ui[id].onchange=()=>{draw();saveSettings()};
+document.getElementById('btnFit').onclick = fit;
+document.getElementById('btnNorth').onclick = ()=>{ view.rot=0; ui.rot.value=0; ui.rotN.value=0; draw(); };
+document.getElementById('btnParse').onclick = ()=>{ codes=structuredClone(DEFAULT_CODES); parse(ui.src.value); buildLayerUI(); buildCodeUI(); fit(); info(); };
+document.getElementById('btnReplot').onclick = ()=>{ codeUndo.push(structuredClone(codes));if(codeUndo.length>20)codeUndo.shift();readCodeUI();parse(ui.src.value);buildLayerUI();draw();info();document.getElementById('btnUndoCode').disabled=false; };
+document.getElementById('btnUndoCode').onclick=()=>{if(!codeUndo.length)return;codes=codeUndo.pop();parse(ui.src.value);buildLayerUI();buildCodeUI();draw();info();document.getElementById('btnUndoCode').disabled=!codeUndo.length};
+document.getElementById('btnFile').onclick = ()=>document.getElementById('file').click();
+document.getElementById('file').onchange = e=>{
+  const f=e.target.files[0]; if(!f) return;
+  f.text().then(t=>{ ui.src.value=t; document.getElementById('btnParse').click();
+    document.getElementById('fJob').value ||= f.name.split(' ')[0];
+  });
+};
+function loadShotFile(f){if(!f||!(/\.(txt|csv)$/i.test(f.name)))return alert('Choose a .txt or .csv shot file.');f.text().then(t=>{ui.src.value=t;document.getElementById('btnParse').click();document.getElementById('fJob').value||=f.name.replace(/\.[^.]+$/,'').split(' ')[0]})}
+let dragDepth=0;window.addEventListener('dragenter',e=>{e.preventDefault();dragDepth++;document.getElementById('dropzone').classList.add('show')});window.addEventListener('dragover',e=>e.preventDefault());window.addEventListener('dragleave',()=>{if(--dragDepth<=0){dragDepth=0;document.getElementById('dropzone').classList.remove('show')}});window.addEventListener('drop',e=>{e.preventDefault();dragDepth=0;document.getElementById('dropzone').classList.remove('show');loadShotFile(e.dataTransfer.files[0])});
+function info(){ document.getElementById('tbInfo').textContent =
+  points.length+' points · '+lines.filter(l=>l.pts.length>1).length+' lines · '+Object.keys(layers).length+' layers'; }
+
+function buildLayerUI(){
+  const el=document.getElementById('layerList'); el.innerHTML='';
+  for(const [name,L] of Object.entries(layers).sort()){
+    const row=document.createElement('div'); row.className='lrow';
+    row.innerHTML=`<input type="checkbox" ${L.visible?'checked':''}><span class="sw" style="background:${L.color}"></span><span>${name}</span><span class="cnt">${L.count}</span>`;
+    row.querySelector('input').onchange=e=>{ L.visible=e.target.checked; draw(); };
+    el.appendChild(row);
+  }
+}
+function buildCodeUI(){
+  const tb=document.querySelector('#codeTable tbody'); tb.innerHTML='';
+  for(const [c,def] of Object.entries(codes).sort()){
+    const tr=document.createElement('tr'); tr.dataset.code=c;
+    tr.innerHTML=`<td title="${def.name}">${c}</td>
+      <td><select><option${def.type==='point'?' selected':''}>point</option><option${def.type==='line'?' selected':''}>line</option></select></td>
+      <td><input type="text" value="${def.layer}"></td>
+      <td><input type="color" value="${toHex(def.color)}"></td>`;
+    tb.appendChild(tr);
+  }
+}
+function readCodeUI(){
+  for(const tr of document.querySelectorAll('#codeTable tbody tr')){
+    const c=tr.dataset.code, [sel,layer,col]=tr.querySelectorAll('select,input');
+    codes[c]={...codes[c], type:sel.value, layer:layer.value.trim()||c, color:col.value};
+  }
+}
+function toHex(col){
+  if(col.startsWith('#')) return col;
+  const d=document.createElement('div'); d.style.color=col; document.body.appendChild(d);
+  const m=getComputedStyle(d).color.match(/\d+/g); d.remove();
+  return '#'+m.slice(0,3).map(x=>(+x).toString(16).padStart(2,'0')).join('');
+}
+
+// ---------- DXF export (R12) ----------
+// map a hex color to the nearest bright ACI color (1-7) by hue, gray only if truly desaturated
+function nearestACI(hex){
+  const h=toHex(hex), r=parseInt(h.slice(1,3),16)/255, g=parseInt(h.slice(3,5),16)/255, b=parseInt(h.slice(5,7),16)/255;
+  const mx=Math.max(r,g,b), mn=Math.min(r,g,b), d=mx-mn;
+  if(d < 0.08) return mx>0.6 ? 7 : 8;             // gray/white
+  let hue; // 0-360
+  if(mx===r) hue=((g-b)/d*60+360)%360;
+  else if(mx===g) hue=(b-r)/d*60+120;
+  else hue=(r-g)/d*60+240;
+  if(hue<30||hue>=330) return 1;   // red
+  if(hue<75)  return 2;            // yellow
+  if(hue<160) return 3;            // green
+  if(hue<200) return 4;            // cyan
+  if(hue<260) return 5;            // blue
+  return 6;                        // magenta
+}
+function dxf(){
+  const L=[];
+  const put=(...a)=>L.push(...a);
+  put('0','SECTION','2','TABLES','0','TABLE','2','LAYER','70',String(Object.keys(layers).length+1));
+  put('0','LAYER','2','0','70','0','62','7','6','CONTINUOUS');
+  for(const [name,lay] of Object.entries(layers))
+    put('0','LAYER','2',name,'70','0','62',String(nearestACI(lay.color)),'6','CONTINUOUS');
+  put('0','ENDTAB','0','ENDSEC');
+  put('0','SECTION','2','ENTITIES');
+  for(const Ln of lines){
+    if(Ln.pts.length<2) continue;
+    put('0','POLYLINE','8',Ln.layer,'66','1','70','0');
+    for(const pi of Ln.pts){
+      const p=points[pi];
+      put('0','VERTEX','8',Ln.layer,'10',p.e.toFixed(4),'20',p.n.toFixed(4),'30',p.z.toFixed(4));
+    }
+    put('0','SEQEND');
+  }
+  const ts=+document.getElementById('tsize').value/4;
+  for(const p of points){
+    const lay = p.codes.length ? codes[baseCode(p.codes[0])].layer : 'POINTS';
+    touchLayer('POINTS','#ffffff');
+    put('0','POINT','8',lay,'10',p.e.toFixed(4),'20',p.n.toFixed(4),'30',p.z.toFixed(4));
+    put('0','TEXT','8','PT-NUM','10',(p.e+1).toFixed(4),'20',(p.n+1).toFixed(4),'30','0','40','2','1',p.p);
+    if(p.desc) put('0','TEXT','8','PT-DESC','10',(p.e+1).toFixed(4),'20',(p.n-2).toFixed(4),'30','0','40','2','1',p.desc);
+  }
+  put('0','ENDSEC','0','EOF');
+  return L.join('\r\n');
+}
+document.getElementById('btnDXF').onclick = ()=>{
+  if(!points.length) return alert('Parse data first.');
+  touchLayer('PT-NUM','#ffffff'); touchLayer('PT-DESC','#aaaaaa'); touchLayer('POINTS','#ffffff');
+  const blob=new Blob([dxf()],{type:'application/dxf'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=(document.getElementById('fJob').value||'survey')+'-plot.dxf'; a.click();
+};
+
+// ---------- print ----------
+document.getElementById('btnPrint').onclick = ()=>{
+  if(!points.length) return alert('Parse data first.');
+  renderPrintSheet();
+  setTimeout(()=>window.print(),100);
+};
+function renderPrintSheet(){
+  for(const [f,p] of [['fTitle','pTitle'],['fAddr','pAddr'],['fJob','pJob'],['fDate','pDate'],['fSurv','pSurv']])
+    document.getElementById(p).textContent=document.getElementById(f).value;
+  document.getElementById('pScale').textContent='1" = '+document.getElementById('fScale').value+' ft';
+  document.getElementById('pRot').textContent=view.rot.toFixed(1)+'°';
+  const pc=document.getElementById('cvPrint');
+  const DPI=150, wIn=7.5, hIn=10.55;
+  pc.width=wIn*DPI; pc.height=hIn*DPI;
+  const g=pc.getContext('2d');
+  g.fillStyle='#fff'; g.fillRect(0,0,pc.width,pc.height);
+  const ftPerIn=+document.getElementById('fScale').value;
+  // auto-center the sheet on the near (non-control) points, in the rotated frame
+  const near=points.filter(p=>!p.far);
+  const rr=-view.rot*Math.PI/180;
+  // trimmed bbox (10th-90th pct) so a few remote shots (road poles etc.) don't drag the sheet off the lot
+  const rxs=[],rys=[];
+  for(const p of near){
+    rxs.push(p.e*Math.cos(rr)-p.n*Math.sin(rr));
+    rys.push(p.e*Math.sin(rr)+p.n*Math.cos(rr));
+  }
+  rxs.sort((a,b)=>a-b); rys.sort((a,b)=>a-b);
+  const pct=(a,q)=>a[Math.min(a.length-1,Math.round(q*(a.length-1)))];
+  const cxr=(pct(rxs,0.1)+pct(rxs,0.9))/2, cyr=(pct(rys,0.1)+pct(rys,0.9))/2; // rotate back to world
+  const pv={cx:cxr*Math.cos(-rr)-cyr*Math.sin(-rr), cy:cxr*Math.sin(-rr)+cyr*Math.cos(-rr), rot:view.rot, scale:DPI/ftPerIn};
+  renderScene(g,pc.width,pc.height,pv,{dark:false,tsize:Math.round(DPI*0.08),psize:DPI*0.02,
+    num:ui.showNum.checked,elev:ui.showElev.checked,desc:ui.showDesc.checked,pts:ui.showPts.checked,far:false});
+  drawNorthArrow(g,pc.width-DPI*0.7,DPI*0.8,DPI*0.35,view.rot,false);
+  // scale bar
+  g.strokeStyle='#000'; g.fillStyle='#000'; g.lineWidth=2; g.font=(DPI*0.09)+'px Arial';
+  const bx=DPI*0.4, by=pc.height-DPI*0.4;
+  g.beginPath(); g.moveTo(bx,by); g.lineTo(bx+DPI,by); g.stroke();
+  g.beginPath(); g.moveTo(bx,by-6); g.lineTo(bx,by+6); g.moveTo(bx+DPI,by-6); g.lineTo(bx+DPI,by+6); g.stroke();
+  g.fillText('0',bx-4,by+DPI*0.15+8); g.fillText(ftPerIn+" ft",bx+DPI-10,by+DPI*0.15+8);
+  if(document.getElementById('showLegend').checked) drawPrintLegend(g,pc.width-DPI*2.15,pc.height-DPI*1.55,DPI);
+}
+function drawPrintLegend(g,x,y,DPI){
+  const entries=Object.entries(layers).filter(([,v])=>v.visible).slice(0,9),h=(entries.length+1)*DPI*.16+12,w=DPI*1.75;
+  g.save();g.fillStyle='#fffffff2';g.strokeStyle='#000';g.lineWidth=1;g.fillRect(x,y-h,w,h);g.strokeRect(x,y-h,w,h);g.fillStyle='#000';g.font='bold '+DPI*.085+'px Arial';g.fillText('LEGEND',x+8,y-h+15);g.font=DPI*.073+'px Arial';
+  entries.forEach(([name,L],i)=>{const yy=y-h+30+i*DPI*.16;g.strokeStyle=toHex(L.color);g.lineWidth=2;g.beginPath();g.moveTo(x+9,yy);g.lineTo(x+31,yy);g.stroke();g.fillStyle='#000';g.fillText(name,x+38,yy+3)});g.restore();
+}
+
+// ---------- workspace preferences / shortcuts ----------
+const SETTINGS_KEY='survey-shot-plotter.settings.v2';
+function saveSettings(){
+  const data={rot:+ui.rot.value,tsize:+ui.tsize.value,psize:+ui.psize.value};
+  ['showNum','showElev','showDesc','showPts','showFar','showLegend'].forEach(id=>data[id]=document.getElementById(id).checked);
+  ['fTitle','fSurv','fScale'].forEach(id=>data[id]=document.getElementById(id).value);
+  try{localStorage.setItem(SETTINGS_KEY,JSON.stringify(data))}catch{}
+}
+function loadSettings(){try{const d=JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}');Object.entries(d).forEach(([id,v])=>{const el=document.getElementById(id);if(!el)return;if(el.type==='checkbox')el.checked=!!v;else el.value=v});view.rot=+ui.rot.value||0;ui.rotN.value=view.rot;document.getElementById('tsizeV').textContent=ui.tsize.value;document.getElementById('psizeV').textContent=ui.psize.value}catch{}}
+document.querySelectorAll('.sec h2').forEach(h=>h.addEventListener('click',()=>h.parentElement.classList.toggle('collapsed')));
+document.querySelectorAll('#sidebar input,#sidebar select').forEach(el=>el.addEventListener('change',saveSettings));
+window.addEventListener('keydown',e=>{if(/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;if(e.key.toLowerCase()==='f'){e.preventDefault();fit()}if(e.key.toLowerCase()==='n'){e.preventDefault();document.getElementById('btnNorth').click()}if(e.key==='Escape'){selectedPoint=-1;draw()}});
+
+// ---------- boot ----------
+const SAMPLE = `198,5190.3726,10082.7648,79.1461,IRF 1"
+199,5084.0035,10148.4902,80.1874,RBF #5
+200,4978.1425,9976.6309,101.1425,EIP 1" DIA.
+201,5085.0104,9912.5043,101.8295,RBF #5
+202,5065.7685,9924.5407,107.2882,FN1
+203,5084.8465,9913.1735,105.5042,FN1
+204,5104.3160,9944.3082,102.5722,FN1
+205,5118.1434,9967.0745,96.6127,FN1
+206,5132.5832,9990.1795,97.1298,FN1
+207,5122.7510,9995.5233,97.1968,FN1 B FG
+208,5119.2997,9997.9090,96.7074,FN1 FG E
+209,5102.1746,10008.6731,100.6850,B DECK
+210,5110.8145,10003.5463,99.3485,DECK
+211,5102.8637,9990.2338,96.4455,DECK
+212,5085.7372,10000.4968,96.8426,DECK
+213,5088.4887,10005.1505,96.8321,DECK
+214,5087.1021,10005.2230,96.2783,B STEP
+215,5084.0373,10000.1128,96.3472,STEP
+216,5089.4499,9996.7744,96.3141,STEP E
+217,5088.8692,9995.7632,95.7358,B STEP
+218,5082.3109,9999.5372,95.7646,STEP
+219,5086.0314,10005.8134,95.7020,STEP
+220,5073.1633,10113.9007,86.9871,EC
+221,5099.3212,10151.8255,79.9376,EC
+222,5099.8106,10161.7611,79.7719,EC E
+223,5117.6245,10151.0883,79.4273,B EC1
+224,5110.9943,10146.7872,80.0028,EC1
+225,5082.6084,10106.6156,87.1838,EC1
+226,5064.2212,10080.0782,91.7086,EC1
+227,5065.2662,10069.9972,93.1652,EC1
+228,5070.7223,10062.5386,94.4878,EC1 E
+1000,5050.2559,9951.2324,108.9595,SHED
+1001,5058.5813,9959.8535,106.5823,SHED
+1002,5009.3461,9991.5918,103.9457,WELL
+1003,5047.4721,9935.4938,107.8784,B FN B FN1
+1004,5033.5798,9943.8379,107.3518,FN B FG
+1005,5029.6426,9946.1877,107.2090,FN FG E
+1006,4979.0227,9976.6681,103.1107,FN
+1007,4994.6384,10002.0399,103.7549,FN
+1008,5011.5685,10029.3695,101.3895,FN
+1010,5023.8316,10044.0895,98.4360,FN
+1011,5030.9063,10039.3290,98.4496,FN B FG
+1012,5040.1992,10034.2116,98.0879,FN FG E
+1013,5052.6727,10026.9813,98.8718,FN E
+1015,5053.1043,10026.6737,101.1667,BD
+1016,5063.0772,10043.5289,100.0558,BD
+1017,5060.8508,10044.8159,100.1244,BD
+1018,5051.4259,10028.8965,94.7153,B EC
+1019,5035.9969,10038.9977,94.3431,EC
+1020,5026.8192,10046.7535,94.3449,EC
+1021,5049.5199,10079.7466,92.2963,EC
+1022,4999.9966,10000.0004,100.0068,SHED
+1023,5085.4252,10006.7382,99.0121,EM
+1024,5078.4679,10009.2695,97.8095,HVAC
+1025,5088.6207,10005.4908,101.4206,BD
+1026,5093.6699,10013.7547,101.4844,BD
+1027,5102.1742,10008.6739,100.9034,BD
+1028,5111.1588,10023.6859,101.0174,BD FACE @ CHIMNEY
+1029,5113.1197,10022.5364,100.8229,CHIMNEY
+1030,5115.9536,10027.2178,99.7579,CHIMNEY
+1031,5116.1789,10032.1974,100.1080,BD
+1032,5101.2497,10040.9591,98.9986,BD
+1033,5099.3817,10037.9841,100.0533,BD
+1034,5098.7429,10038.2968,100.0234,BD FACE
+1035,5096.5012,10041.8261,99.5929,BD
+1036,5088.3230,10046.5897,99.1740,BD FACE
+1037,5088.7772,10052.2233,98.4197,BD
+1038,5071.4556,10062.5411,98.3583,BD
+1048,5399.8353,9950.8245,83.8023,PP B OE
+1049,5190.5302,10081.7499,88.3763,PP OE B OE1
+1050,5213.5090,10140.8120,87.9475,PP OE1 E
+1051,4976.9447,10213.0416,86.8521,PP OE E
+1052,5190.7361,10084.0860,81.5229,TEL-PED
+2002,588328.1498,1364701.3868,736.8966,NL #2
+2199,588340.7763,1364746.1873,733.0690,RBF #5`;
+document.getElementById('btnSample').onclick = ()=>{ ui.src.value=SAMPLE; document.getElementById('btnParse').click(); };
+document.getElementById('fDate').value = new Date().toLocaleDateString();
+loadSettings();
+window.addEventListener('resize',draw);
+// auto-load sample on first open (after layout so fit() sees real canvas size)
+requestAnimationFrame(()=>{
+  document.getElementById('btnSample').click();
+  document.getElementById('fAddr').value = '161 Rainbow Dr, Stanley NC';
+  document.getElementById('fJob').value = '2400009';
+});
+</script>
+</body>
+</html>
