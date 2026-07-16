@@ -325,14 +325,28 @@ function draw(){
   document.getElementById('status').textContent =
     `rot ${view.rot.toFixed(1)}°  ·  1 px = ${(1/view.scale).toFixed(2)} ft  ·  ${points.length} pts / ${lines.filter(l=>l.pts.length>1).length} lines`;
 }
+// darken/saturate a color so it stays legible on a white printed sheet
+function printColor(c){
+  const h=toHex(c), r=parseInt(h.slice(1,3),16)/255, g=parseInt(h.slice(3,5),16)/255, b=parseInt(h.slice(5,7),16)/255;
+  const mx=Math.max(r,g,b), mn=Math.min(r,g,b); let l=(mx+mn)/2, s=0, hu=0;
+  if(mx!==mn){ const d=mx-mn; s=l>0.5? d/(2-mx-mn) : d/(mx+mn);
+    hu = mx===r ? ((g-b)/d+(g<b?6:0))/6 : mx===g ? ((b-r)/d+2)/6 : ((r-g)/d+4)/6; }
+  l=Math.min(l,0.38); s = s<0.25 ? s : Math.max(s,0.6);   // keep near-grays gray, saturate real colors
+  const q=l<0.5? l*(1+s) : l+s-l*s, p=2*l-q;
+  const f=t=>{ t=(t+1)%1; return t<1/6? p+(q-p)*6*t : t<0.5? q : t<2/3? p+(q-p)*(2/3-t)*6 : p; };
+  const to=x=>Math.round(x*255).toString(16).padStart(2,'0');
+  return s===0? '#'+to(l)+to(l)+to(l) : '#'+to(f(hu+1/3))+to(f(hu))+to(f(hu-1/3));
+}
 function renderScene(g,W,H,v,opt){
+  const ink = opt.dark ? (c=>c) : printColor;   // print gets darkened colors
+  const lw  = opt.lwScale || 1;                  // print gets DPI-scaled line weights
   // lines
   for(const L of lines){
     if(L.pts.length<2 || !layers[L.layer].visible) continue;
     const selected = selectedPoint>=0 && L.pts.includes(selectedPoint);
-    g.strokeStyle = selected ? '#ffffff' : L.color; g.lineWidth = selected ? 3.5 : 1.5;
+    g.strokeStyle = selected ? (opt.dark?'#ffffff':'#000000') : ink(L.color); g.lineWidth = (selected ? 3.5 : 1.5)*lw;
     if(selected){ g.shadowColor=L.color; g.shadowBlur=9; }
-    if(L.base==='OE') g.setLineDash([8,5]); else g.setLineDash([]);
+    if(L.base==='OE') g.setLineDash([8*lw,5*lw]); else g.setLineDash([]);
     g.beginPath();
     L.pts.forEach((pi,k)=>{
       const p = points[pi], s = worldToScreen(p.e,p.n,W,H,v);
@@ -350,8 +364,8 @@ function renderScene(g,W,H,v,opt){
     if(!onLine && p.codes.length && !vis) continue;
     const s = worldToScreen(p.e,p.n,W,H,v);
     if(s[0]<-50||s[1]<-50||s[0]>W+50||s[1]>H+50) continue;
-    const col = p.codes.length ? codes[baseCode(p.codes[0])].color : (opt.dark?'#8899aa':'#556');
-    if(opt.pts) drawSurveySymbol(g,s[0],s[1],Math.max(opt.psize,2),p,col,i===selectedPoint);
+    const col = ink(p.codes.length ? codes[baseCode(p.codes[0])].color : (opt.dark?'#8899aa':'#556'));
+    if(opt.pts) drawSurveySymbol(g,s[0],s[1],Math.max(opt.psize,2),p,col,i===selectedPoint,lw);
     g.font = opt.tsize+'px Arial';
     let ly = s[1]-opt.tsize*0.7;
     g.fillStyle = opt.dark ? '#cfd8dc':'#222';
@@ -372,9 +386,9 @@ function renderScene(g,W,H,v,opt){
     }
   }
 }
-function drawSurveySymbol(g,x,y,r,p,col,selected){
+function drawSurveySymbol(g,x,y,r,p,col,selected,lw=1){
   const base=p.codes.length?baseCode(p.codes[0]):'', layer=p.codes.length?codes[base]?.layer:'';
-  g.save(); g.translate(x,y); g.strokeStyle=selected?'#fff':col; g.fillStyle=col; g.lineWidth=selected?2.4:1.3;
+  g.save(); g.translate(x,y); g.strokeStyle=selected?'#fff':col; g.fillStyle=col; g.lineWidth=(selected?2.4:1.3)*lw;
   if(selected){g.shadowColor=col;g.shadowBlur=10}
   if(layer==='MON'||['IRF','RBF','EIP','NL','NLS'].includes(base)){
     g.beginPath();g.arc(0,0,r+2,0,Math.PI*2);g.stroke();g.beginPath();g.moveTo(-r-4,0);g.lineTo(r+4,0);g.moveTo(0,-r-4);g.lineTo(0,r+4);g.stroke();
@@ -574,6 +588,8 @@ document.getElementById('btnPrint').onclick = ()=>{
   renderPrintSheet();
   setTimeout(()=>window.print(),100);
 };
+// Ctrl+P / browser-menu print must also render the sheet, or it prints blank
+window.addEventListener('beforeprint', ()=>{ if(points.length) renderPrintSheet(); });
 function renderPrintSheet(){
   for(const [f,p] of [['fTitle','pTitle'],['fAddr','pAddr'],['fJob','pJob'],['fDate','pDate'],['fSurv','pSurv']])
     document.getElementById(p).textContent=document.getElementById(f).value;
@@ -598,7 +614,7 @@ function renderPrintSheet(){
   const pct=(a,q)=>a[Math.min(a.length-1,Math.round(q*(a.length-1)))];
   const cxr=(pct(rxs,0.1)+pct(rxs,0.9))/2, cyr=(pct(rys,0.1)+pct(rys,0.9))/2; // rotate back to world
   const pv={cx:cxr*Math.cos(-rr)-cyr*Math.sin(-rr), cy:cxr*Math.sin(-rr)+cyr*Math.cos(-rr), rot:view.rot, scale:DPI/ftPerIn};
-  renderScene(g,pc.width,pc.height,pv,{dark:false,tsize:Math.round(DPI*0.08),psize:DPI*0.02,
+  renderScene(g,pc.width,pc.height,pv,{dark:false,tsize:Math.round(DPI*0.08),psize:DPI*0.028,lwScale:DPI/75,
     num:ui.showNum.checked,elev:ui.showElev.checked,desc:ui.showDesc.checked,pts:ui.showPts.checked,far:false});
   drawNorthArrow(g,pc.width-DPI*0.7,DPI*0.8,DPI*0.35,view.rot,false);
   // scale bar
@@ -612,7 +628,7 @@ function renderPrintSheet(){
 function drawPrintLegend(g,x,y,DPI){
   const entries=Object.entries(layers).filter(([,v])=>v.visible).slice(0,9),h=(entries.length+1)*DPI*.16+12,w=DPI*1.75;
   g.save();g.fillStyle='#fffffff2';g.strokeStyle='#000';g.lineWidth=1;g.fillRect(x,y-h,w,h);g.strokeRect(x,y-h,w,h);g.fillStyle='#000';g.font='bold '+DPI*.085+'px Arial';g.fillText('LEGEND',x+8,y-h+15);g.font=DPI*.073+'px Arial';
-  entries.forEach(([name,L],i)=>{const yy=y-h+30+i*DPI*.16;g.strokeStyle=toHex(L.color);g.lineWidth=2;g.beginPath();g.moveTo(x+9,yy);g.lineTo(x+31,yy);g.stroke();g.fillStyle='#000';g.fillText(name,x+38,yy+3)});g.restore();
+  entries.forEach(([name,L],i)=>{const yy=y-h+30+i*DPI*.16;g.strokeStyle=printColor(L.color);g.lineWidth=3;g.beginPath();g.moveTo(x+9,yy);g.lineTo(x+31,yy);g.stroke();g.fillStyle='#000';g.fillText(name,x+38,yy+3)});g.restore();
 }
 
 // ---------- workspace preferences / shortcuts ----------
