@@ -34,7 +34,7 @@ auto-added as point features so nothing is dropped silently.
 
 - **CAD view** (screen): always true-north-up at 0°, pan/zoom, layer toggles — matches how Brian keeps his drawing files
 - **Rotation slider**: rotates the *view only* for an upright, cleaner presentation; the compass/north arrow tracks the rotation so orientation is never lost
-- **Print view / PDF**: browser print dialog produces the sheet — plot at a true engineering scale (1"=10…100 ft), north compass, scale bar, title block with editable job fields. Auto-centers on the subject lot (trimmed 10–90th percentile extent)
+- **Sheet preview / PDF**: opens an in-app preview of the full sheet (border, plot at true engineering scale, north compass, scale bar, legend, title block with editable job fields). From there: **Open as PDF** generates a real self-contained PDF (legal 8.5×14) in the browser, or **Print** sends it to paper. Auto-centers on the subject lot (trimmed 10–90th percentile extent)
 
 ## DXF export
 

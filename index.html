@@ -51,24 +51,23 @@
   #dropzone{position:fixed;inset:16px;display:none;place-items:center;border:2px dashed var(--accent);border-radius:16px;background:#07100ee8;color:#eafff9;z-index:50;font-size:18px;font-weight:700;box-shadow:inset 0 0 80px #33d1b020}
   #dropzone.show{display:grid}.kbd{border:1px solid #41576b;border-bottom-width:2px;border-radius:4px;padding:1px 5px;font:10px Consolas;color:#bdcad5;background:#1c2733}
   .hint{margin-left:auto;color:var(--dim);display:flex;gap:10px;font-size:11px}
-  /* ---------- print sheet ---------- */
+  /* ---------- print sheet (hidden; used by Ctrl+P) ---------- */
   #sheet{display:none}
   @media print{
     body{display:block;height:auto;overflow:visible;background:#fff}
-    #sidebar,#main{display:none!important}
+    #sidebar,#main,#pvOverlay{display:none!important}
     #sheet{display:block}
   }
-  #sheet .page{width:7.8in;height:13.3in;margin:0 auto;position:relative;color:#000;font-family:Arial,sans-serif}
-  #sheet .border{position:absolute;inset:0;border:2px solid #000}
-  #sheet .plotarea{position:absolute;left:0.15in;top:0.15in;right:0.15in;bottom:2.6in;border:1px solid #000;overflow:hidden}
-  #sheet canvas{width:100%;height:100%}
-  #sheet .tblock{position:absolute;left:0.15in;right:0.15in;bottom:0.15in;height:2.3in;border:1px solid #000;display:flex}
-  #sheet .tb-l{flex:1.6;padding:8px;border-right:1px solid #000}
-  #sheet .tb-r{flex:1;padding:8px;font-size:9px}
-  #sheet .tb-l h3{margin:0 0 2px;font-size:14px;text-align:center}
-  #sheet .tb-l .sub{text-align:center;font-size:10px;margin-bottom:6px}
-  #sheet .fld{font-size:10px;margin:2px 0}
-  #sheet .fld b{display:inline-block;min-width:80px}
+  #sheet .page{width:7.8in;margin:0 auto}
+  #sheet canvas{width:100%;display:block}
+  /* ---------- sheet preview overlay ---------- */
+  #pvOverlay{position:fixed;inset:0;background:#000a;display:none;flex-direction:column;z-index:60}
+  #pvOverlay.show{display:flex}
+  #pvBar{display:flex;gap:8px;align-items:center;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+  #pvBar .ttl{font-weight:600}
+  #pvBar .sp{flex:1}
+  #pvScroll{flex:1;overflow:auto;padding:24px;text-align:center}
+  #pvScroll img{background:#fff;box-shadow:0 10px 50px #000d;max-width:min(94%,780px);height:auto}
 </style>
 </head>
 <body>
@@ -146,31 +145,19 @@
   </div>
 </div>
 
-<!-- print-only sheet -->
-<div id="sheet">
-  <div class="page">
-    <div class="border"></div>
-    <div class="plotarea"><canvas id="cvPrint"></canvas></div>
-    <div class="tblock">
-      <div class="tb-l">
-        <h3 id="pTitle">MORTGAGE SURVEY</h3>
-        <div class="sub" id="pAddr"></div>
-        <div class="fld"><b>Job #:</b><span id="pJob"></span></div>
-        <div class="fld"><b>Date:</b><span id="pDate"></span></div>
-        <div class="fld"><b>Surveyor:</b><span id="pSurv"></span></div>
-        <div class="fld"><b>Scale:</b><span id="pScale"></span></div>
-        <div class="fld"><b>View rotation:</b><span id="pRot"></span> (north arrow shows true orientation)</div>
-      </div>
-      <div class="tb-r">
-        <b>NOTES</b>
-        <ol style="margin:4px 0 0 14px;padding:0">
-          <li>Preliminary plot generated from field shot data. Not a certified survey document.</li>
-          <li>Coordinates are localized field values unless noted.</li>
-          <li>Linework auto-connected from field codes; verify before use.</li>
-        </ol>
-      </div>
-    </div>
+<!-- print-only sheet (whole page drawn on one canvas) -->
+<div id="sheet"><div class="page"><canvas id="cvSheet"></canvas></div></div>
+
+<!-- sheet preview overlay -->
+<div id="pvOverlay">
+  <div id="pvBar">
+    <span class="ttl">Sheet preview</span>
+    <span class="sp"></span>
+    <button class="primary" id="pvPdf">Open as PDF</button>
+    <button id="pvPrint">Print</button>
+    <button id="pvClose">Close</button>
   </div>
+  <div id="pvScroll"><img id="pvImg" alt="survey sheet preview"></div>
 </div>
 
 <script>
@@ -582,25 +569,35 @@ document.getElementById('btnDXF').onclick = ()=>{
   a.download=(document.getElementById('fJob').value||'survey')+'-plot.dxf'; a.click();
 };
 
-// ---------- print ----------
-document.getElementById('btnPrint').onclick = ()=>{
-  if(!points.length) return alert('Parse data first.');
-  renderPrintSheet();
-  setTimeout(()=>window.print(),100);
-};
-// Ctrl+P / browser-menu print must also render the sheet, or it prints blank
-window.addEventListener('beforeprint', ()=>{ if(points.length) renderPrintSheet(); });
+// ---------- sheet / print / PDF ----------
+const val = id=>document.getElementById(id).value;
+function wrapText(g,text,maxW){
+  const words=text.split(' '), out=[]; let line='';
+  for(const wd of words){ const t=line?line+' '+wd:wd;
+    if(g.measureText(t).width>maxW && line){ out.push(line); line=wd; } else line=t; }
+  if(line) out.push(line);
+  return out;
+}
 function renderPrintSheet(){
-  for(const [f,p] of [['fTitle','pTitle'],['fAddr','pAddr'],['fJob','pJob'],['fDate','pDate'],['fSurv','pSurv']])
-    document.getElementById(p).textContent=document.getElementById(f).value;
-  document.getElementById('pScale').textContent='1" = '+document.getElementById('fScale').value+' ft';
-  document.getElementById('pRot').textContent=view.rot.toFixed(1)+'°';
-  const pc=document.getElementById('cvPrint');
-  const DPI=150, wIn=7.5, hIn=10.55;
-  pc.width=wIn*DPI; pc.height=hIn*DPI;
+  const DPI=150, pc=document.getElementById('cvSheet');
+  const W=Math.round(7.8*DPI), H=Math.round(13.3*DPI);
+  pc.width=W; pc.height=H;
   const g=pc.getContext('2d');
-  g.fillStyle='#fff'; g.fillRect(0,0,pc.width,pc.height);
-  const ftPerIn=+document.getElementById('fScale').value;
+  g.fillStyle='#fff'; g.fillRect(0,0,W,H);
+  const M=Math.round(0.1*DPI);
+  g.strokeStyle='#000'; g.lineWidth=3; g.strokeRect(M,M,W-2*M,H-2*M);
+  // plot window
+  const px=Math.round(0.22*DPI), py=px;
+  const TB=Math.round(2.2*DPI), gap=Math.round(0.12*DPI);
+  const pw=W-2*px, ph=H-py-TB-gap-px;
+  g.lineWidth=1.5; g.strokeRect(px,py,pw,ph);
+  g.save(); g.beginPath(); g.rect(px,py,pw,ph); g.clip(); g.translate(px,py);
+  drawSheetScene(g,pw,ph,DPI);
+  g.restore();
+  drawTitleBlock(g, px, py+ph+gap, pw, TB, DPI);
+}
+function drawSheetScene(g,pw,ph,DPI){
+  const ftPerIn=+val('fScale');
   // auto-center the sheet on the near (non-control) points, in the rotated frame
   const near=points.filter(p=>!p.far);
   const rr=-view.rot*Math.PI/180;
@@ -614,17 +611,87 @@ function renderPrintSheet(){
   const pct=(a,q)=>a[Math.min(a.length-1,Math.round(q*(a.length-1)))];
   const cxr=(pct(rxs,0.1)+pct(rxs,0.9))/2, cyr=(pct(rys,0.1)+pct(rys,0.9))/2; // rotate back to world
   const pv={cx:cxr*Math.cos(-rr)-cyr*Math.sin(-rr), cy:cxr*Math.sin(-rr)+cyr*Math.cos(-rr), rot:view.rot, scale:DPI/ftPerIn};
-  renderScene(g,pc.width,pc.height,pv,{dark:false,tsize:Math.round(DPI*0.08),psize:DPI*0.028,lwScale:DPI/75,
+  renderScene(g,pw,ph,pv,{dark:false,tsize:Math.round(DPI*0.08),psize:DPI*0.028,lwScale:DPI/75,
     num:ui.showNum.checked,elev:ui.showElev.checked,desc:ui.showDesc.checked,pts:ui.showPts.checked,far:false});
-  drawNorthArrow(g,pc.width-DPI*0.7,DPI*0.8,DPI*0.35,view.rot,false);
+  drawNorthArrow(g,pw-DPI*0.7,DPI*0.8,DPI*0.35,view.rot,false);
   // scale bar
   g.strokeStyle='#000'; g.fillStyle='#000'; g.lineWidth=2; g.font=(DPI*0.09)+'px Arial';
-  const bx=DPI*0.4, by=pc.height-DPI*0.4;
+  const bx=DPI*0.4, by=ph-DPI*0.4;
   g.beginPath(); g.moveTo(bx,by); g.lineTo(bx+DPI,by); g.stroke();
   g.beginPath(); g.moveTo(bx,by-6); g.lineTo(bx,by+6); g.moveTo(bx+DPI,by-6); g.lineTo(bx+DPI,by+6); g.stroke();
   g.fillText('0',bx-4,by+DPI*0.15+8); g.fillText(ftPerIn+" ft",bx+DPI-10,by+DPI*0.15+8);
-  if(document.getElementById('showLegend').checked) drawPrintLegend(g,pc.width-DPI*2.15,pc.height-DPI*1.55,DPI);
+  if(document.getElementById('showLegend').checked) drawPrintLegend(g,pw-DPI*2.15,ph-DPI*1.55,DPI);
 }
+function drawTitleBlock(g,x,y,w,h,DPI){
+  g.strokeStyle='#000'; g.fillStyle='#000'; g.lineWidth=1.5;
+  g.strokeRect(x,y,w,h);
+  const div=x+Math.round(w*0.6);
+  g.beginPath(); g.moveTo(div,y); g.lineTo(div,y+h); g.stroke();
+  // left cell — title, address, fields
+  g.textAlign='center';
+  g.font='bold '+Math.round(DPI*0.17)+'px Arial';
+  g.fillText(val('fTitle').toUpperCase(), x+w*0.3, y+DPI*0.33);
+  g.font=Math.round(DPI*0.11)+'px Arial';
+  g.fillText(val('fAddr'), x+w*0.3, y+DPI*0.55);
+  g.textAlign='left';
+  const rows=[['Job #',val('fJob')],['Date',val('fDate')],['Surveyor',val('fSurv')],
+    ['Scale','1" = '+val('fScale')+' ft'],['View rotation',view.rot.toFixed(1)+'° — north arrow shows true north']];
+  rows.forEach((r,i)=>{
+    const yy=y+DPI*0.85+i*DPI*0.24;
+    g.font='bold '+Math.round(DPI*0.095)+'px Arial'; g.fillText(r[0]+':', x+DPI*0.15, yy);
+    g.font=Math.round(DPI*0.095)+'px Arial'; g.fillText(r[1], x+DPI*1.05, yy);
+  });
+  // right cell — notes
+  g.font='bold '+Math.round(DPI*0.095)+'px Arial';
+  g.fillText('NOTES', div+DPI*0.12, y+DPI*0.28);
+  const notes=[
+    '1. Preliminary plot generated from field shot data. Not a certified survey document.',
+    '2. Coordinates are localized field values unless noted.',
+    '3. Linework auto-connected from field codes; verify before use.'];
+  g.font=Math.round(DPI*0.085)+'px Arial';
+  let ny=y+DPI*0.5;
+  for(const n of notes)
+    for(const line of wrapText(g,n,(x+w)-(div+DPI*0.24))){ g.fillText(line, div+DPI*0.12, ny); ny+=DPI*0.14; }
+}
+// minimal single-page PDF (legal 8.5x14) with the sheet embedded as JPEG
+function sheetToPdf(){
+  renderPrintSheet();
+  const pc=document.getElementById('cvSheet');
+  const bin=atob(pc.toDataURL('image/jpeg',0.92).split(',')[1]);
+  const W=612, H=1008, iw=7.8*72, ih=13.3*72, ox=(W-iw)/2, oy=(H-ih)/2;
+  const content=`q ${iw} 0 0 ${ih} ${ox.toFixed(1)} ${oy.toFixed(1)} cm /Im1 Do Q`;
+  let pdf='%PDF-1.4\n';
+  const offs=[];
+  const add=s=>{ offs.push(pdf.length); pdf+=s; };
+  add('1 0 obj <</Type/Catalog/Pages 2 0 R>> endobj\n');
+  add('2 0 obj <</Type/Pages/Kids[3 0 R]/Count 1>> endobj\n');
+  add(`3 0 obj <</Type/Page/Parent 2 0 R/MediaBox[0 0 ${W} ${H}]/Resources<</XObject<</Im1 5 0 R>>>>/Contents 4 0 R>> endobj\n`);
+  add(`4 0 obj <</Length ${content.length}>> stream\n${content}\nendstream endobj\n`);
+  add(`5 0 obj <</Type/XObject/Subtype/Image/Width ${pc.width}/Height ${pc.height}/ColorSpace/DeviceRGB/BitsPerComponent 8/Filter/DCTDecode/Length ${bin.length}>> stream\n`);
+  pdf+=bin+'\nendstream endobj\n';
+  const xref=pdf.length;
+  pdf+='xref\n0 6\n0000000000 65535 f \n'
+     + offs.map(o=>String(o).padStart(10,'0')+' 00000 n \n').join('')
+     + `trailer <</Size 6/Root 1 0 R>>\nstartxref\n${xref}\n%%EOF`;
+  const bytes=new Uint8Array(pdf.length);
+  for(let i=0;i<pdf.length;i++) bytes[i]=pdf.charCodeAt(i)&0xff;
+  return new Blob([bytes],{type:'application/pdf'});
+}
+document.getElementById('btnPrint').onclick = ()=>{
+  if(!points.length) return alert('Parse data first.');
+  renderPrintSheet();
+  document.getElementById('pvImg').src=document.getElementById('cvSheet').toDataURL('image/jpeg',0.9);
+  document.getElementById('pvOverlay').classList.add('show');
+};
+document.getElementById('pvClose').onclick = ()=>document.getElementById('pvOverlay').classList.remove('show');
+document.getElementById('pvPrint').onclick = ()=>{ renderPrintSheet(); setTimeout(()=>window.print(),50); };
+document.getElementById('pvPdf').onclick = ()=>{
+  const url=URL.createObjectURL(sheetToPdf());
+  const w=window.open(url);
+  if(!w){ const a=document.createElement('a'); a.href=url; a.download=(val('fJob')||'survey')+'-sheet.pdf'; a.click(); }
+};
+// Ctrl+P / browser-menu print must also render the sheet, or it prints blank
+window.addEventListener('beforeprint', ()=>{ if(points.length) renderPrintSheet(); });
 function drawPrintLegend(g,x,y,DPI){
   const entries=Object.entries(layers).filter(([,v])=>v.visible).slice(0,9),h=(entries.length+1)*DPI*.16+12,w=DPI*1.75;
   g.save();g.fillStyle='#fffffff2';g.strokeStyle='#000';g.lineWidth=1;g.fillRect(x,y-h,w,h);g.strokeRect(x,y-h,w,h);g.fillStyle='#000';g.font='bold '+DPI*.085+'px Arial';g.fillText('LEGEND',x+8,y-h+15);g.font=DPI*.073+'px Arial';
@@ -642,7 +709,7 @@ function saveSettings(){
 function loadSettings(){try{const d=JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}');Object.entries(d).forEach(([id,v])=>{const el=document.getElementById(id);if(!el)return;if(el.type==='checkbox')el.checked=!!v;else el.value=v});view.rot=+ui.rot.value||0;ui.rotN.value=view.rot;document.getElementById('tsizeV').textContent=ui.tsize.value;document.getElementById('psizeV').textContent=ui.psize.value}catch{}}
 document.querySelectorAll('.sec h2').forEach(h=>h.addEventListener('click',()=>h.parentElement.classList.toggle('collapsed')));
 document.querySelectorAll('#sidebar input,#sidebar select').forEach(el=>el.addEventListener('change',saveSettings));
-window.addEventListener('keydown',e=>{if(/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;if(e.key.toLowerCase()==='f'){e.preventDefault();fit()}if(e.key.toLowerCase()==='n'){e.preventDefault();document.getElementById('btnNorth').click()}if(e.key==='Escape'){selectedPoint=-1;draw()}});
+window.addEventListener('keydown',e=>{if(/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;if(e.key.toLowerCase()==='f'){e.preventDefault();fit()}if(e.key.toLowerCase()==='n'){e.preventDefault();document.getElementById('btnNorth').click()}if(e.key==='Escape'){const ov=document.getElementById('pvOverlay');if(ov.classList.contains('show')){ov.classList.remove('show');return}selectedPoint=-1;draw()}});
 
 // ---------- boot ----------
 const SAMPLE = `198,5190.3726,10082.7648,79.1461,IRF 1"
