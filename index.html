@@ -177,7 +177,7 @@ const DEFAULT_CODES = {
   BD : {type:'line',  layer:'BLDG',         color:'#ff6b6b', name:'Building'},
   DECK:{type:'line',  layer:'DECK',         color:'#d98cb3', name:'Deck'},
   STEP:{type:'line',  layer:'STEPS',        color:'#c792ea', name:'Steps'},
-  OE : {type:'line',  layer:'UTIL-OHE',     color:'#f9e2af', name:'Overhead electric'},
+  OE : {type:'line',  layer:'UTIL-OHE',     color:'#f9e2af', name:'Overhead electric', dash:true},
   EP : {type:'line',  layer:'PAVE',         color:'#8be9fd', name:'Edge of pavement'},
   IRF: {type:'point', layer:'MON',          color:'#50fa7b', name:'Iron rod found'},
   RBF: {type:'point', layer:'MON',          color:'#50fa7b', name:'Rebar found'},
@@ -276,14 +276,14 @@ function parse(text){
     points.push({...r, codes:ptCodes, note:noteToks.join(' '), far});
   }
   // build layer registry
-  for(const L of lines){ touchLayer(L.layer, L.color); layers[L.layer].count += L.pts.length; }
+  for(const L of lines){ touchLayer(L.layer, L.color, codes[L.base]?.dash); layers[L.layer].count += L.pts.length; }
   for(const pt of points){ for(const c of pt.codes){ const d = codes[baseCode(c)]; touchLayer(d.layer, d.color); layers[d.layer].count++; } }
   document.getElementById('warnings').textContent =
     (farPts.length? farPts.length+' far point(s) treated as control/ties (toggle in View).\n':'') + warns.join('\n');
   return true;
 }
 function closeLine(L){ /* hook for future: closed-shape detection */ }
-function touchLayer(name,color){ if(!layers[name]) layers[name]={color,visible:true,count:0}; }
+function touchLayer(name,color,dash){ if(!layers[name]) layers[name]={color,visible:true,count:0,dash:!!dash}; else if(dash) layers[name].dash=true; }
 const STOPWORDS = new Set(['DIST:','FILL','FACE','COR','DIA.','DIA','@','THE','OF']);
 function autoColor(s){ let h=0; for(const ch of s) h=(h*31+ch.charCodeAt(0))%360; return `hsl(${h},65%,65%)`; }
 
@@ -333,7 +333,7 @@ function renderScene(g,W,H,v,opt){
     const selected = selectedPoint>=0 && L.pts.includes(selectedPoint);
     g.strokeStyle = selected ? (opt.dark?'#ffffff':'#000000') : ink(L.color); g.lineWidth = (selected ? 3.5 : 1.5)*lw;
     if(selected){ g.shadowColor=L.color; g.shadowBlur=9; }
-    if(L.base==='OE') g.setLineDash([8*lw,5*lw]); else g.setLineDash([]);
+    if(codes[L.base]?.dash) g.setLineDash([8*lw,5*lw]); else g.setLineDash([]);
     g.beginPath();
     L.pts.forEach((pi,k)=>{
       const p = points[pi], s = worldToScreen(p.e,p.n,W,H,v);
@@ -535,25 +535,34 @@ function nearestACI(hex){
 function dxf(){
   const L=[];
   const put=(...a)=>L.push(...a);
-  put('0','SECTION','2','TABLES','0','TABLE','2','LAYER','70',String(Object.keys(layers).length+1));
+  // header — declare R12 so CAD knows what it's reading
+  put('0','SECTION','2','HEADER','9','$ACADVER','1','AC1009','0','ENDSEC');
+  put('0','SECTION','2','TABLES');
+  // linetypes must be defined before layers can reference them
+  put('0','TABLE','2','LTYPE','70','2');
+  put('0','LTYPE','2','CONTINUOUS','70','0','3','Solid line','72','65','73','0','40','0.0');
+  put('0','LTYPE','2','DASHED','70','0','3','__ __ __','72','65','73','2','40','3.0','49','2.25','49','-0.75');
+  put('0','ENDTAB');
+  put('0','TABLE','2','LAYER','70',String(Object.keys(layers).length+1));
   put('0','LAYER','2','0','70','0','62','7','6','CONTINUOUS');
   for(const [name,lay] of Object.entries(layers))
-    put('0','LAYER','2',name,'70','0','62',String(nearestACI(lay.color)),'6','CONTINUOUS');
+    put('0','LAYER','2',name,'70','0','62',String(nearestACI(lay.color)),'6',lay.dash?'DASHED':'CONTINUOUS');
+  put('0','ENDTAB');
+  put('0','TABLE','2','STYLE','70','1');
+  put('0','STYLE','2','STANDARD','70','0','40','0.0','41','1.0','50','0.0','71','0','42','0.2','3','txt','4','');
   put('0','ENDTAB','0','ENDSEC');
   put('0','SECTION','2','ENTITIES');
   for(const Ln of lines){
     if(Ln.pts.length<2) continue;
-    put('0','POLYLINE','8',Ln.layer,'66','1','70','0');
+    put('0','POLYLINE','8',Ln.layer,'66','1','70','8');   // 70=8: true 3D polyline
     for(const pi of Ln.pts){
       const p=points[pi];
-      put('0','VERTEX','8',Ln.layer,'10',p.e.toFixed(4),'20',p.n.toFixed(4),'30',p.z.toFixed(4));
+      put('0','VERTEX','8',Ln.layer,'10',p.e.toFixed(4),'20',p.n.toFixed(4),'30',p.z.toFixed(4),'70','32'); // 32: 3D polyline vertex
     }
-    put('0','SEQEND');
+    put('0','SEQEND','8',Ln.layer);
   }
-  const ts=+document.getElementById('tsize').value/4;
   for(const p of points){
     const lay = p.codes.length ? codes[baseCode(p.codes[0])].layer : 'POINTS';
-    touchLayer('POINTS','#ffffff');
     put('0','POINT','8',lay,'10',p.e.toFixed(4),'20',p.n.toFixed(4),'30',p.z.toFixed(4));
     put('0','TEXT','8','PT-NUM','10',(p.e+1).toFixed(4),'20',(p.n+1).toFixed(4),'30','0','40','2','1',p.p);
     if(p.desc) put('0','TEXT','8','PT-DESC','10',(p.e+1).toFixed(4),'20',(p.n-2).toFixed(4),'30','0','40','2','1',p.desc);
@@ -695,7 +704,7 @@ window.addEventListener('beforeprint', ()=>{ if(points.length) renderPrintSheet(
 function drawPrintLegend(g,x,y,DPI){
   const entries=Object.entries(layers).filter(([,v])=>v.visible).slice(0,9),h=(entries.length+1)*DPI*.16+12,w=DPI*1.75;
   g.save();g.fillStyle='#fffffff2';g.strokeStyle='#000';g.lineWidth=1;g.fillRect(x,y-h,w,h);g.strokeRect(x,y-h,w,h);g.fillStyle='#000';g.font='bold '+DPI*.085+'px Arial';g.fillText('LEGEND',x+8,y-h+15);g.font=DPI*.073+'px Arial';
-  entries.forEach(([name,L],i)=>{const yy=y-h+30+i*DPI*.16;g.strokeStyle=printColor(L.color);g.lineWidth=3;g.beginPath();g.moveTo(x+9,yy);g.lineTo(x+31,yy);g.stroke();g.fillStyle='#000';g.fillText(name,x+38,yy+3)});g.restore();
+  entries.forEach(([name,L],i)=>{const yy=y-h+30+i*DPI*.16;g.strokeStyle=printColor(L.color);g.lineWidth=3;if(L.dash)g.setLineDash([6,4]);g.beginPath();g.moveTo(x+9,yy);g.lineTo(x+31,yy);g.stroke();g.setLineDash([]);g.fillStyle='#000';g.fillText(name,x+38,yy+3)});g.restore();
 }
 
 // ---------- workspace preferences / shortcuts ----------
