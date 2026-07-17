@@ -535,9 +535,41 @@ function nearestACI(hex){
 function dxf(){
   const L=[];
   const put=(...a)=>L.push(...a);
-  // header — declare R12 so CAD knows what it's reading
-  put('0','SECTION','2','HEADER','9','$ACADVER','1','AC1009','0','ENDSEC');
+  // drawing extents — without these (and a VPORT) CAD opens staring at 0,0 and the file "looks blank".
+  // Frame the view on the near (non-control) points: state-plane ties can sit a million feet away
+  // and would zoom the survey down to an invisible speck.
+  const near=points.filter(p=>!p.far);
+  const use=near.length?near:(points.length?points:[{e:0,n:0,z:0}]);
+  const all=points.length?points:use;
+  const minE=Math.min(...all.map(p=>p.e)), maxE=Math.max(...all.map(p=>p.e));
+  const minN=Math.min(...all.map(p=>p.n)), maxN=Math.max(...all.map(p=>p.n));
+  const minZ=Math.min(...all.map(p=>p.z)), maxZ=Math.max(...all.map(p=>p.z));
+  const nMinE=Math.min(...use.map(p=>p.e)), nMaxE=Math.max(...use.map(p=>p.e));
+  const nMinN=Math.min(...use.map(p=>p.n)), nMaxN=Math.max(...use.map(p=>p.n));
+  const cE=(nMinE+nMaxE)/2, cN=(nMinN+nMaxN)/2, spanN=(nMaxN-nMinN)*1.1+20;
+  // header — declare R12, extents, and visible point style (X marks)
+  put('0','SECTION','2','HEADER',
+    '9','$ACADVER','1','AC1009',
+    '9','$INSBASE','10','0.0','20','0.0','30','0.0',
+    '9','$EXTMIN','10',minE.toFixed(4),'20',minN.toFixed(4),'30',minZ.toFixed(4),
+    '9','$EXTMAX','10',maxE.toFixed(4),'20',maxN.toFixed(4),'30',maxZ.toFixed(4),
+    '9','$LIMMIN','10',minE.toFixed(4),'20',minN.toFixed(4),
+    '9','$LIMMAX','10',maxE.toFixed(4),'20',maxN.toFixed(4),
+    '9','$PDMODE','70','3',
+    '9','$PDSIZE','40','1.5',
+    '9','$LTSCALE','40','1.0',
+    '0','ENDSEC');
   put('0','SECTION','2','TABLES');
+  // active viewport centered on the survey so the drawing is framed on open
+  put('0','TABLE','2','VPORT','70','1',
+    '0','VPORT','2','*ACTIVE','70','0',
+    '10','0.0','20','0.0','11','1.0','21','1.0',
+    '12',cE.toFixed(4),'22',cN.toFixed(4),
+    '13','0.0','23','0.0','14','10.0','24','10.0','15','10.0','25','10.0',
+    '16','0.0','26','0.0','36','1.0','17','0.0','27','0.0','37','0.0',
+    '40',spanN.toFixed(4),'41','1.5','42','50.0','43','0.0','44','0.0',
+    '50','0.0','51','0.0','71','0','72','100','73','1','74','3','75','0','76','0','77','0','78','0',
+    '0','ENDTAB');
   // linetypes must be defined before layers can reference them
   put('0','TABLE','2','LTYPE','70','2');
   put('0','LTYPE','2','CONTINUOUS','70','0','3','Solid line','72','65','73','0','40','0.0');
